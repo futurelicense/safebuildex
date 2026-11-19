@@ -168,6 +168,36 @@ export function Form({
   )
 }
 
+export function ModelReading({
+  source,
+  text,
+  note,
+  pending,
+  onAsk,
+}: {
+  source?: 'engine' | 'groq'
+  text: string
+  note?: string
+  pending: boolean
+  onAsk: () => void
+}) {
+  return (
+    <Card title="Reading of this result">
+      <p>Groq explains the saved result in the terms of the historical-rate model. The count itself stays the engine result.</p>
+      <p>
+        <Tag tone={source === 'groq' ? '' : 'warn'}>{source === 'groq' ? 'Groq, aligned to the saved model' : 'Engine reading'}</Tag>
+      </p>
+      <div className="notice">{text}</div>
+      {note ? <p className="muted">{note}</p> : null}
+      <div className="toolbar">
+        <button className="btn" type="button" disabled={pending} onClick={onAsk}>
+          {pending ? 'Reading the saved result…' : 'Ask Groq to read this result'}
+        </button>
+      </div>
+    </Card>
+  )
+}
+
 export function Tag({ children, tone = '' }: { children: ReactNode; tone?: '' | 'warn' | 'bad' }) {
   return <span className={`tag ${tone}`}>{children}</span>
 }

@@ -1,13 +1,34 @@
+import { useRef, useState } from 'react'
 import { aggregate, forecastInterval } from '../lib/analytics'
+import { forecastBrief, READ_FORECAST } from '../lib/briefing'
 import { fmt, now, uid } from '../lib/format'
+import { alignedReading } from '../lib/groq'
 import { useStore } from '../lib/store'
 import type { ForecastRun } from '../lib/types'
-import { Card, Field, Form, Metric, Screen, Table } from '../components/ui'
+import { Card, Field, Form, Metric, ModelReading, Screen, Table } from '../components/ui'
 
 export function Forecast() {
   const { db, observations, scope, commit, flash, projectName } = useStore()
+  const [pending, setPending] = useState(false)
+  const ticket = useRef(0)
   const latest = db.runs.find((run): run is ForecastRun => run.kind === 'Forecast' && run.scope === scope)
   const history = db.runs.filter((run): run is ForecastRun => run.kind === 'Forecast')
+
+  async function readForecast(run: ForecastRun) {
+    const current = ++ticket.current
+    setPending(true)
+    const brief = forecastBrief(run, projectName(run.scope))
+    const result = await alignedReading(READ_FORECAST, brief.context, brief.text)
+    if (current !== ticket.current) return
+    commit((draft) => {
+      const saved = draft.runs.find((item) => item.id === run.id && item.kind === 'Forecast')
+      if (!saved || saved.kind !== 'Forecast') return
+      saved.reading = result.text
+      saved.readingSource = result.source
+      saved.readingNote = result.note
+    }, result.source === 'groq' ? 'Groq reading aligned to the saved forecast' : 'Engine reading kept for the saved forecast')
+    setPending(false)
+  }
 
   function runForecast(data: Record<string, string>) {
     const totals = aggregate(observations)
@@ -32,10 +53,15 @@ export function Forecast() {
       inputs: observations.map((row) => ({ ...row })),
       note: 'Illustrative normal approximation, not calibrated',
     }
+    const brief = forecastBrief(run, projectName(scope))
+    run.reading = brief.text
+    run.readingSource = 'engine'
+    run.readingNote = 'Asking Groq to read this saved forecast.'
     commit((draft) => {
       draft.runs.unshift(run)
     }, 'Historical-rate forecast generated')
     flash('Historical-rate forecast saved on this device')
+    void readForecast(run)
   }
 
   return (
@@ -61,6 +87,13 @@ export function Forecast() {
             </p>
             <p className="muted">{latest.note}</p>
           </Card>
+          <ModelReading
+            source={latest.readingSource}
+            text={latest.reading ?? forecastBrief(latest, projectName(latest.scope)).text}
+            note={latest.readingNote}
+            pending={pending}
+            onAsk={() => void readForecast(latest)}
+          />
         </>
       ) : null}
       <Card title="Saved forecast history">

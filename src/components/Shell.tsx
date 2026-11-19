@@ -3,7 +3,7 @@ import { NAV, ROLES } from '../lib/catalog'
 import { useStore } from '../lib/store'
 import type { Role, SpaceId } from '../lib/types'
 
-export function Shell({ children }: { children: ReactNode }) {
+export function Shell({ children, person, onLogout }: { children: ReactNode; person: string; onLogout: () => void }) {
   const store = useStore()
   return (
     <div className="app">
@@ -67,6 +67,12 @@ export function Shell({ children }: { children: ReactNode }) {
               ))}
             </select>
           </label>
+          <div className="session">
+            <span>{person}</span>
+            <button className="btn secondary" type="button" onClick={onLogout}>
+              Log out
+            </button>
+          </div>
         </header>
         {store.toast ? <div className={`toast ${store.toast.tone}`}>{store.toast.text}</div> : null}
         {children}

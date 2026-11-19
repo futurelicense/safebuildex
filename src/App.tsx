@@ -1,5 +1,9 @@
+import { useState } from 'react'
 import { Shell } from './components/Shell'
+import { loadSession, signOut, type Session } from './lib/auth'
 import { StoreProvider, useStore } from './lib/store'
+import { Landing } from './pages/Landing'
+import { Login } from './pages/Login'
 import { Actions } from './pages/Actions'
 import { Copilot } from './pages/Copilot'
 import { Dashboard } from './pages/Dashboard'
@@ -15,20 +19,36 @@ import { Sustainability } from './pages/Sustainability'
 
 const PAGES = [Dashboard, DataHub, Projects, Hazards, Forecast, Scenario, Optimize, Sustainability, Actions, Copilot, Governance, Reports]
 
-function Workspace() {
+function Workspace({ person, onLogout }: { person: string; onLogout: () => void }) {
   const { page } = useStore()
   const Page = PAGES[page] ?? Dashboard
   return (
-    <Shell>
+    <Shell person={person} onLogout={onLogout}>
       <Page />
     </Shell>
   )
 }
 
 export function App() {
+  const [session, setSession] = useState<Session | null>(() => loadSession())
+  const [gate, setGate] = useState<'landing' | 'login'>('landing')
+  if (!session) {
+    return gate === 'login' ? (
+      <Login onBack={() => setGate('landing')} onEnter={(name) => setSession({ name })} />
+    ) : (
+      <Landing onSignIn={() => setGate('login')} />
+    )
+  }
   return (
     <StoreProvider>
-      <Workspace />
+      <Workspace
+        person={session.name}
+        onLogout={() => {
+          signOut()
+          setSession(null)
+          setGate('landing')
+        }}
+      />
     </StoreProvider>
   )
 }

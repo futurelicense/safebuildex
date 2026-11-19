@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { aggregate, rate } from '../lib/analytics'
-import { fmt, money } from '../lib/format'
+import { aggregate } from '../lib/analytics'
+import { exposureBrief, governanceBrief, planBrief, READ_EXPOSURE, READ_FORECAST, READ_GOVERNANCE, READ_PLAN, READ_SCENARIO, forecastBrief, scenarioBrief, type Reading } from '../lib/briefing'
+import { alignedReading } from '../lib/groq'
 import { useStore } from '../lib/store'
 import type { ForecastRun, OptimizationRun, ScenarioRun } from '../lib/types'
 import { Card, Screen, Tag } from '../components/ui'
@@ -8,44 +9,62 @@ import { Card, Screen, Tag } from '../components/ui'
 const TOPICS = ['Exposure and incident rates', 'Latest forecast', 'Latest scenario', 'Latest control optimization', 'Safety governance boundaries']
 
 export function Copilot() {
-  const { db, observations, scope, commit } = useStore()
+  const { db, observations, scope, commit, projectName } = useStore()
   const [topic, setTopic] = useState(TOPICS[0])
-  const [answer, setAnswer] = useState('Select a topic to begin.')
+  const [pending, setPending] = useState(false)
+  const [answer, setAnswer] = useState<Reading | null>(null)
 
-  function explain() {
+  async function explain() {
     const totals = aggregate(observations)
-    const kind = ({ 'Latest forecast': 'Forecast', 'Latest scenario': 'Scenario', 'Latest control optimization': 'Optimization' } as Record<string, string>)[topic]
-    const run = db.runs.find((item) => item.kind === kind && (scope === 'all' || item.scope === scope))
-    let text = ''
-    if (topic === 'Exposure and incident rates') {
-      text = `Scope: ${scope}. ${fmt(totals.h)} worker-hours, ${totals.c} recordable observations. TRIR ${fmt(rate(totals.c, totals.h))}; DART ${fmt(rate(totals.d, totals.h))}. Source: local exposure observations. Near-miss reporting is not proof of changing risk.`
-    } else if (topic === 'Safety governance boundaries') {
-      text = 'Mandatory controls cannot be removed for cost savings. All real decisions require competent personnel and applicable site procedures. Reference: NIOSH hierarchy of controls and OSHA construction standards in the source catalog.'
-    } else if (!run) {
-      text = 'Insufficient evidence: create a saved run in this scope first.'
-    } else if (run.kind === 'Forecast') {
-      const forecast = run as ForecastRun
-      text = `Run ${forecast.id}, model version ${forecast.version}. Expected count ${fmt(forecast.mu)}; illustrative interval ${fmt(forecast.lower)}–${fmt(forecast.upper)}.`
-    } else if (run.kind === 'Scenario') {
-      const scenario = run as ScenarioRun
-      text = `Run ${scenario.id}, model version ${scenario.version}. Assumed multiplier ${scenario.factor}, seed ${scenario.seed}, P95 count ${scenario.p95}.`
-    } else {
-      const plan = run as OptimizationRun
-      text = plan.feasible
-        ? `Run ${plan.id}, model version ${plan.version}. Selected ${plan.selected?.length ?? 0} illustrative candidates; cost ${money(plan.cost ?? 0)}; residual index ${fmt((plan.residual ?? 0) * 100)}.`
-        : `Run ${plan.id}, model version ${plan.version}. No feasible bundle under the entered constraints. Escalation required.`
+    const scopeName = projectName(scope)
+    let question = READ_EXPOSURE
+    let brief = exposureBrief(scopeName, totals.c, totals.h, totals.d, observations.length)
+    if (topic === 'Safety governance boundaries') {
+      question = READ_GOVERNANCE
+      brief = governanceBrief()
+    } else if (topic === 'Latest forecast') {
+      const run = db.runs.find((item): item is ForecastRun => item.kind === 'Forecast' && (scope === 'all' || item.scope === scope))
+      if (!run) {
+        setAnswer({ text: 'Insufficient evidence: create a saved forecast in this scope first.', source: 'engine', note: 'There is no saved forecast for Groq to read.' })
+        return
+      }
+      question = READ_FORECAST
+      brief = forecastBrief(run, projectName(run.scope))
+    } else if (topic === 'Latest scenario') {
+      const run = db.runs.find((item): item is ScenarioRun => item.kind === 'Scenario' && (scope === 'all' || item.scope === scope))
+      if (!run) {
+        setAnswer({ text: 'Insufficient evidence: create a saved scenario in this scope first.', source: 'engine', note: 'There is no saved scenario for Groq to read.' })
+        return
+      }
+      question = READ_SCENARIO
+      brief = scenarioBrief(run, projectName(run.scope))
+    } else if (topic === 'Latest control optimization') {
+      const run = db.runs.find((item): item is OptimizationRun => item.kind === 'Optimization' && (scope === 'all' || item.scope === scope))
+      if (!run) {
+        setAnswer({ text: 'Insufficient evidence: create a saved optimization in this scope first.', source: 'engine', note: 'There is no saved optimization for Groq to read.' })
+        return
+      }
+      question = READ_PLAN
+      brief = planBrief(run)
     }
-    setAnswer(`${text}\nDemonstration only; not operational advice.`)
-    commit(() => undefined, 'Local advisory explanation generated')
+    setPending(true)
+    const result = await alignedReading(question, brief.context, brief.text)
+    setAnswer(result)
+    setPending(false)
+    commit(() => undefined, result.source === 'groq' ? 'Groq reading aligned to the saved model' : 'Engine reading kept')
   }
 
   return (
     <Screen>
       <Card title="SAFE-BUILD advisory assistant">
         <p>
-          <Tag tone="warn">Local deterministic demo · Groq not connected</Tag>
+          <Tag tone={answer?.source === 'groq' ? '' : 'warn'}>
+            {answer?.source === 'groq' ? 'Groq, aligned to the saved model' : 'Engine reading'}
+          </Tag>
         </p>
-        <p>Choose a topic to generate an explanation grounded in the current synthetic workspace. Nothing is sent off this device.</p>
+        <p>
+          Groq explains a saved run through the local server. It may repeat only the numbers already in that run. The historical-rate count is not recomputed here. Observation rows and the passphrase stay on this device.
+        </p>
         <label>
           Topic
           <select value={topic} onChange={(event) => setTopic(event.target.value)}>
@@ -55,12 +74,12 @@ export function Copilot() {
           </select>
         </label>
         <div className="toolbar">
-          <button className="btn" onClick={explain}>
-            Generate explanation
+          <button className="btn" disabled={pending} onClick={() => void explain()}>
+            {pending ? 'Reading the saved result…' : 'Generate explanation'}
           </button>
         </div>
-        <div className="notice">{answer}</div>
-        <p className="muted">External inference requires a secure gateway, approved context, and evaluation. No worker-identifiable data is sent.</p>
+        <div className="notice">{answer?.text ?? 'Select a topic to begin.'}</div>
+        {answer?.note ? <p className="muted">{answer.note}</p> : null}
       </Card>
     </Screen>
   )

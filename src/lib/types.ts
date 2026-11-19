@@ -72,6 +72,9 @@ export interface ForecastRun {
   upper: number
   inputs: Observation[]
   note: string
+  reading?: string
+  readingSource?: 'engine' | 'groq'
+  readingNote?: string
 }
 
 export interface ScenarioRun {
@@ -90,6 +93,9 @@ export interface ScenarioRun {
   p95: number
   counts: [number, number][]
   inputs: Observation[]
+  reading?: string
+  readingSource?: 'engine' | 'groq'
+  readingNote?: string
 }
 
 export interface OptimizationRun {

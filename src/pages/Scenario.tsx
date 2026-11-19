@@ -1,13 +1,34 @@
+import { useRef, useState } from 'react'
 import { aggregate, scenarioDistribution } from '../lib/analytics'
+import { READ_SCENARIO, scenarioBrief } from '../lib/briefing'
 import { fmt, now, uid } from '../lib/format'
+import { alignedReading } from '../lib/groq'
 import { useStore } from '../lib/store'
 import type { ScenarioRun } from '../lib/types'
-import { BarChart, Card, Field, Form, Metric, Screen, Table } from '../components/ui'
+import { BarChart, Card, Field, Form, Metric, ModelReading, Screen, Table } from '../components/ui'
 
 export function Scenario() {
-  const { db, observations, scope, commit, flash } = useStore()
+  const { db, observations, scope, commit, flash, projectName } = useStore()
+  const [pending, setPending] = useState(false)
+  const ticket = useRef(0)
   const latest = db.runs.find((run): run is ScenarioRun => run.kind === 'Scenario' && run.scope === scope)
   const history = db.runs.filter((run): run is ScenarioRun => run.kind === 'Scenario')
+
+  async function readScenario(run: ScenarioRun) {
+    const current = ++ticket.current
+    setPending(true)
+    const brief = scenarioBrief(run, projectName(run.scope))
+    const result = await alignedReading(READ_SCENARIO, brief.context, brief.text)
+    if (current !== ticket.current) return
+    commit((draft) => {
+      const saved = draft.runs.find((item) => item.id === run.id && item.kind === 'Scenario')
+      if (!saved || saved.kind !== 'Scenario') return
+      saved.reading = result.text
+      saved.readingSource = result.source
+      saved.readingNote = result.note
+    }, result.source === 'groq' ? 'Groq reading aligned to the saved scenario' : 'Engine reading kept for the saved scenario')
+    setPending(false)
+  }
 
   function runScenario(data: Record<string, string>) {
     const totals = aggregate(observations)
@@ -46,10 +67,15 @@ export function Scenario() {
       ...distribution,
       inputs: observations.map((row) => ({ ...row })),
     }
+    const brief = scenarioBrief(run, projectName(scope))
+    run.reading = brief.text
+    run.readingSource = 'engine'
+    run.readingNote = 'Asking Groq to read this saved scenario.'
     commit((draft) => {
       draft.runs.unshift(run)
     }, 'Seeded scenario executed')
     flash('Scenario saved on this device')
+    void readScenario(run)
   }
 
   return (
@@ -81,6 +107,13 @@ export function Scenario() {
           <Card title="Simulated recordable counts · 2,000 samples">
             <BarChart rows={latest.counts.map(([bucket, count]) => ({ label: bucket === 9 ? '9+' : String(bucket), value: count }))} />
           </Card>
+          <ModelReading
+            source={latest.readingSource}
+            text={latest.reading ?? scenarioBrief(latest, projectName(latest.scope)).text}
+            note={latest.readingNote}
+            pending={pending}
+            onAsk={() => void readScenario(latest)}
+          />
         </>
       ) : null}
       <Card title="Scenario archive">

@@ -42,7 +42,7 @@ export const SOURCES: [string, string, string][] = [
   ['EPA ENERGY STAR', 'https://www.energystar.gov/buildings', 'Public benchmark'],
   ['NIOSH hierarchy', 'https://www.cdc.gov/niosh/hierarchy-of-controls/about/index.html', 'Reference'],
   ['OSHA construction standards', 'https://www.osha.gov/laws-regs/regulations/standardnumber/1926', 'Reference'],
-  ['Groq', 'https://console.groq.com/docs/', 'Server gateway required'],
+  ['Groq', 'https://console.groq.com/docs/', 'Server gateway; explains saved forecasts'],
 ]
 
 export const PHASES = ['Excavation', 'Structural', 'Envelope', 'Mechanical', 'Commissioning']
