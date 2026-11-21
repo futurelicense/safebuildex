@@ -7,7 +7,7 @@ const SITES = [
 
 const MONTHS = [2, 1, 4, 3, 2, 5, 1, 3, 4, 2, 3, 3]
 
-export function Landing({ onSignIn }: { onSignIn: () => void }) {
+export function Landing({ onSignIn, onTour }: { onSignIn: () => void; onTour: () => void }) {
   return (
     <div className="gate">
       <header className="gate-bar">
@@ -18,6 +18,9 @@ export function Landing({ onSignIn }: { onSignIn: () => void }) {
           <a href="#method">Method</a>
           <a href="#forecast">Forecast</a>
           <a href="#modules">Modules</a>
+          <button className="text-link" type="button" onClick={onTour}>
+            Tour
+          </button>
           <button className="btn" type="button" onClick={onSignIn}>
             Sign in
           </button>
@@ -35,9 +38,9 @@ export function Landing({ onSignIn }: { onSignIn: () => void }) {
             <button className="btn" type="button" onClick={onSignIn}>
               Open the workspace
             </button>
-            <a className="hero-link" href="#forecast">
-              See a worked forecast
-            </a>
+            <button className="hero-link tour-hero" type="button" onClick={onTour}>
+              Take the tour
+            </button>
           </div>
         </div>
         <div className="preview" aria-label="Demo workspace snapshot">

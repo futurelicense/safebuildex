@@ -3,7 +3,7 @@ import { NAV, ROLES } from '../lib/catalog'
 import { useStore } from '../lib/store'
 import type { Role, SpaceId } from '../lib/types'
 
-export function Shell({ children, person, onLogout }: { children: ReactNode; person: string; onLogout: () => void }) {
+export function Shell({ children, person, onLogout, onTour }: { children: ReactNode; person: string; onLogout: () => void; onTour: () => void }) {
   const store = useStore()
   return (
     <div className="app">
@@ -67,6 +67,9 @@ export function Shell({ children, person, onLogout }: { children: ReactNode; per
               ))}
             </select>
           </label>
+          <button className="btn secondary small" type="button" onClick={onTour}>
+            Tour
+          </button>
           <div className="session">
             <span>{person}</span>
             <button className="btn secondary" type="button" onClick={onLogout}>
